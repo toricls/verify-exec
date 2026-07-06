@@ -165,7 +165,14 @@ func TestTdef001PerContainer(t *testing.T) {
 }
 
 func TestRegistryOrderAndIDs(t *testing.T) {
-	want := []string{"LOCAL-001", "LOCAL-002", "TASK-001", "TASK-002", "TASK-003", "TDEF-001"}
+	want := []string{
+		"LOCAL-001", "LOCAL-002",
+		"CLUSTER-001", "CLUSTER-002", "CLUSTER-003", "CLUSTER-004", "CLUSTER-005",
+		"TASK-001", "TASK-002", "TASK-003", "TASK-004", "TASK-005",
+		"TDEF-001", "TDEF-002", "TDEF-003", "TDEF-004", "TDEF-005", "TDEF-006",
+		"IAM-001", "IAM-002", "IAM-003", "IAM-004", "IAM-005", "IAM-006", "IAM-007",
+		"NET-001", "NET-002", "NET-003",
+	}
 	all := All()
 	if len(all) != len(want) {
 		t.Fatalf("got %d checks, want %d", len(all), len(want))
