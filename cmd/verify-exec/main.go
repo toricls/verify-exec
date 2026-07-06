@@ -37,6 +37,9 @@ const (
 	exitToolFailure = 3
 )
 
+// version is stamped at build time via -ldflags (see the Makefile).
+var version = "dev"
+
 type options struct {
 	container string
 	profile   string
@@ -56,6 +59,7 @@ func run() int {
 	root := &cobra.Command{
 		Use:           "verify-exec <cluster> <task-id>",
 		Short:         "Diagnose whether ECS Exec can be used against a task",
+		Version:       version,
 		Args:          cobra.ExactArgs(2),
 		SilenceUsage:  true,
 		SilenceErrors: true,
