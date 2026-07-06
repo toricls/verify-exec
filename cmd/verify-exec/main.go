@@ -14,7 +14,13 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/spf13/cobra"
 
 	"github.com/toricls/verify-exec/internal/checks"
@@ -103,7 +109,15 @@ func execute(ctx context.Context, cluster, taskID string, opts options) (int, er
 		return exitToolFailure, fmt.Errorf("AWS region is not set; use --region or configure a default region")
 	}
 
-	snapshot := collect.Collect(ctx, collect.Deps{ECS: ecs.NewFromConfig(cfg)}, cluster, taskID)
+	snapshot := collect.Collect(ctx, collect.Deps{
+		ECS:  ecs.NewFromConfig(cfg),
+		STS:  sts.NewFromConfig(cfg),
+		IAM:  iam.NewFromConfig(cfg),
+		EC2:  ec2.NewFromConfig(cfg),
+		KMS:  kms.NewFromConfig(cfg),
+		Logs: cloudwatchlogs.NewFromConfig(cfg),
+		S3:   s3.NewFromConfig(cfg),
+	}, cluster, taskID)
 
 	findings, runErr := runner.Run(ctx, runner.Options{
 		Checks:    checks.All(),

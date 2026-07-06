@@ -7,12 +7,31 @@ func All() []Check {
 	return []Check{
 		NewLocal001(),
 		NewLocal002(),
-		// TODO: CLUSTER-001..005
+		NewCluster001(),
+		NewCluster002(),
+		NewCluster003(),
+		NewCluster004(),
+		NewCluster005(),
 		NewTask001(),
 		NewTask002(),
 		NewTask003(),
-		// TODO: TASK-004, TASK-005
+		NewTask004(),
+		NewTask005(),
 		NewTdef001(),
-		// TODO: TDEF-002..006, IAM-001..007, NET-001..003
+		NewTdef002(),
+		NewTdef003(),
+		NewTdef004(),
+		NewTdef005(),
+		NewTdef006(),
+		NewIam001(),
+		NewIam002(),
+		NewIam003(),
+		NewIam004(),
+		NewIam005(),
+		NewIam006(),
+		NewIam007(),
+		NewNet001(),
+		NewNet002(),
+		NewNet003(),
 	}
 }
