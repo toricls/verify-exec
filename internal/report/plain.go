@@ -9,7 +9,7 @@ import (
 
 // PlainRenderer appends one line per finding as each check completes
 // (completion order). It is the non-TTY fallback mode; on a TTY the
-// TUI takes over later.
+// TUI takes over.
 type PlainRenderer struct {
 	w io.Writer
 }
