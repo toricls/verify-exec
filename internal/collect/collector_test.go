@@ -16,7 +16,13 @@ import (
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
+
+	"github.com/toricls/verify-exec/internal/awsapi/awsapitest"
 )
+
+func depsOf(f *awsapitest.Fakes) Deps {
+	return Deps{ECS: f.ECS, STS: f.STS, IAM: f.IAM, EC2: f.EC2, KMS: f.KMS, Logs: f.Logs, S3: f.S3}
+}
 
 const (
 	testTaskArn    = "arn:aws:ecs:ap-northeast-1:123456789012:task/my-cluster/abc123"
@@ -34,16 +40,16 @@ func runningTask() ecstypes.Task {
 	}
 }
 
-func withTask(f *fakes, task ecstypes.Task) {
-	f.ecs.describeTasks = func(*ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
+func withTask(f *awsapitest.Fakes, task ecstypes.Task) {
+	f.ECS.DescribeTasksFn = func(*ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
 		return &ecs.DescribeTasksOutput{Tasks: []ecstypes.Task{task}}, nil
 	}
 }
 
 func TestCollectResolvesTaskAndTaskDefinition(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	withTask(f, runningTask())
-	f.ecs.describeTaskDefinition = func(in *ecs.DescribeTaskDefinitionInput) (*ecs.DescribeTaskDefinitionOutput, error) {
+	f.ECS.DescribeTaskDefinitionFn = func(in *ecs.DescribeTaskDefinitionInput) (*ecs.DescribeTaskDefinitionOutput, error) {
 		if !strings.HasSuffix(aws.ToString(in.TaskDefinition), "task-definition/app:1") {
 			t.Errorf("DescribeTaskDefinition called with %q", aws.ToString(in.TaskDefinition))
 		}
@@ -52,7 +58,7 @@ func TestCollectResolvesTaskAndTaskDefinition(t *testing.T) {
 		}}, nil
 	}
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 
 	task, err := s.Task.Get(context.Background())
 	if err != nil {
@@ -71,19 +77,19 @@ func TestCollectResolvesTaskAndTaskDefinition(t *testing.T) {
 }
 
 func TestCollectTaskNotFound(t *testing.T) {
-	f := newFakes()
-	f.ecs.describeTasks = func(*ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
+	f := awsapitest.New()
+	f.ECS.DescribeTasksFn = func(*ecs.DescribeTasksInput) (*ecs.DescribeTasksOutput, error) {
 		return &ecs.DescribeTasksOutput{Failures: []ecstypes.Failure{{
 			Arn:    aws.String(testTaskArn),
 			Reason: aws.String("MISSING"),
 		}}}, nil
 	}
-	f.ecs.describeTaskDefinition = func(*ecs.DescribeTaskDefinitionInput) (*ecs.DescribeTaskDefinitionOutput, error) {
+	f.ECS.DescribeTaskDefinitionFn = func(*ecs.DescribeTaskDefinitionInput) (*ecs.DescribeTaskDefinitionOutput, error) {
 		t.Error("DescribeTaskDefinition must not be called when the task is missing")
 		return nil, nil
 	}
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 
 	if _, err := s.Task.Get(context.Background()); err == nil || !strings.Contains(err.Error(), "MISSING") {
 		t.Errorf("Task.Get() error = %v, want MISSING failure", err)
@@ -94,15 +100,15 @@ func TestCollectTaskNotFound(t *testing.T) {
 }
 
 func TestCollectStoppedTaskCancelsDownstream(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	task := runningTask()
 	task.LastStatus = aws.String("STOPPED")
 	withTask(f, task)
-	f.ecs.describeTaskDefinition = func(*ecs.DescribeTaskDefinitionInput) (*ecs.DescribeTaskDefinitionOutput, error) {
+	f.ECS.DescribeTaskDefinitionFn = func(*ecs.DescribeTaskDefinitionInput) (*ecs.DescribeTaskDefinitionOutput, error) {
 		return &ecs.DescribeTaskDefinitionOutput{TaskDefinition: &ecstypes.TaskDefinition{}}, nil
 	}
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 
 	if _, err := s.Task.Get(context.Background()); err != nil {
 		t.Fatalf("Task.Get() error = %v", err)
@@ -124,8 +130,8 @@ func TestCollectStoppedTaskCancelsDownstream(t *testing.T) {
 }
 
 func TestCollectClusterMissing(t *testing.T) {
-	f := newFakes()
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	f := awsapitest.New()
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 
 	info, err := s.Cluster.Get(context.Background())
 	if err != nil {
@@ -144,9 +150,9 @@ func TestCollectClusterMissing(t *testing.T) {
 }
 
 func TestCollectExecLogConfigResolvesKMS(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	withTask(f, runningTask())
-	f.ecs.describeClusters = func(*ecs.DescribeClustersInput) (*ecs.DescribeClustersOutput, error) {
+	f.ECS.DescribeClustersFn = func(*ecs.DescribeClustersInput) (*ecs.DescribeClustersOutput, error) {
 		return &ecs.DescribeClustersOutput{Clusters: []ecstypes.Cluster{{
 			ClusterName: aws.String("my-cluster"),
 			Status:      aws.String("ACTIVE"),
@@ -158,7 +164,7 @@ func TestCollectExecLogConfigResolvesKMS(t *testing.T) {
 			},
 		}}}, nil
 	}
-	f.kms.describeKey = func(in *kms.DescribeKeyInput) (*kms.DescribeKeyOutput, error) {
+	f.KMS.DescribeKeyFn = func(in *kms.DescribeKeyInput) (*kms.DescribeKeyOutput, error) {
 		if aws.ToString(in.KeyId) != "key-1234" {
 			t.Errorf("DescribeKey called with %q", aws.ToString(in.KeyId))
 		}
@@ -168,7 +174,7 @@ func TestCollectExecLogConfigResolvesKMS(t *testing.T) {
 		}}, nil
 	}
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 	logCfg, err := s.ExecLogConfig.Get(context.Background())
 	if err != nil {
 		t.Fatalf("ExecLogConfig.Get() error = %v", err)
@@ -182,9 +188,9 @@ func TestCollectExecLogConfigResolvesKMS(t *testing.T) {
 }
 
 func TestCollectTaskRoleFromTaskDefinition(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	withTask(f, runningTask())
-	f.ecs.describeTaskDefinition = func(*ecs.DescribeTaskDefinitionInput) (*ecs.DescribeTaskDefinitionOutput, error) {
+	f.ECS.DescribeTaskDefinitionFn = func(*ecs.DescribeTaskDefinitionInput) (*ecs.DescribeTaskDefinitionOutput, error) {
 		return &ecs.DescribeTaskDefinitionOutput{TaskDefinition: &ecstypes.TaskDefinition{
 			TaskRoleArn: aws.String("arn:aws:iam::123456789012:role/app-task-role"),
 		}}, nil
@@ -193,7 +199,7 @@ func TestCollectTaskRoleFromTaskDefinition(t *testing.T) {
 		mu                  sync.Mutex
 		simulatedPrincipals []string
 	)
-	f.iam.simulatePrincipalPolicy = func(in *iam.SimulatePrincipalPolicyInput) (*iam.SimulatePrincipalPolicyOutput, error) {
+	f.IAM.SimulatePrincipalPolicyFn = func(in *iam.SimulatePrincipalPolicyInput) (*iam.SimulatePrincipalPolicyOutput, error) {
 		mu.Lock()
 		simulatedPrincipals = append(simulatedPrincipals, aws.ToString(in.PolicySourceArn))
 		mu.Unlock()
@@ -203,7 +209,7 @@ func TestCollectTaskRoleFromTaskDefinition(t *testing.T) {
 		}}}, nil
 	}
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 	role, err := s.TaskRole.Get(context.Background())
 	if err != nil {
 		t.Fatalf("TaskRole.Get() error = %v", err)
@@ -234,18 +240,18 @@ func TestCollectTaskRoleFromTaskDefinition(t *testing.T) {
 }
 
 func TestCollectTaskRoleFallsBackToInstanceRole(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	task := runningTask()
 	task.LaunchType = ecstypes.LaunchTypeEc2
 	task.ContainerInstanceArn = aws.String("arn:aws:ecs:ap-northeast-1:123456789012:container-instance/my-cluster/ci-1")
 	withTask(f, task)
-	f.ecs.describeContainerInstances = func(*ecs.DescribeContainerInstancesInput) (*ecs.DescribeContainerInstancesOutput, error) {
+	f.ECS.DescribeContainerInstancesFn = func(*ecs.DescribeContainerInstancesInput) (*ecs.DescribeContainerInstancesOutput, error) {
 		return &ecs.DescribeContainerInstancesOutput{ContainerInstances: []ecstypes.ContainerInstance{{
 			ContainerInstanceArn: aws.String("arn:aws:ecs:ap-northeast-1:123456789012:container-instance/my-cluster/ci-1"),
 			Ec2InstanceId:        aws.String("i-0123456789abcdef0"),
 		}}}, nil
 	}
-	f.ec2.describeInstances = func(in *ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error) {
+	f.EC2.DescribeInstancesFn = func(in *ec2.DescribeInstancesInput) (*ec2.DescribeInstancesOutput, error) {
 		if in.InstanceIds[0] != "i-0123456789abcdef0" {
 			t.Errorf("DescribeInstances called with %v", in.InstanceIds)
 		}
@@ -257,7 +263,7 @@ func TestCollectTaskRoleFallsBackToInstanceRole(t *testing.T) {
 			}},
 		}}}, nil
 	}
-	f.iam.getInstanceProfile = func(in *iam.GetInstanceProfileInput) (*iam.GetInstanceProfileOutput, error) {
+	f.IAM.GetInstanceProfileFn = func(in *iam.GetInstanceProfileInput) (*iam.GetInstanceProfileOutput, error) {
 		if aws.ToString(in.InstanceProfileName) != "ecs-nodes" {
 			t.Errorf("GetInstanceProfile called with %q", aws.ToString(in.InstanceProfileName))
 		}
@@ -266,7 +272,7 @@ func TestCollectTaskRoleFallsBackToInstanceRole(t *testing.T) {
 		}}, nil
 	}
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 	role, err := s.TaskRole.Get(context.Background())
 	if err != nil {
 		t.Fatalf("TaskRole.Get() error = %v", err)
@@ -277,10 +283,10 @@ func TestCollectTaskRoleFallsBackToInstanceRole(t *testing.T) {
 }
 
 func TestCollectTaskRoleNoneOnFargateWithoutRole(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	withTask(f, runningTask()) // Fargate, no task role in the task definition
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 	role, err := s.TaskRole.Get(context.Background())
 	if err != nil {
 		t.Fatalf("TaskRole.Get() error = %v", err)
@@ -291,10 +297,10 @@ func TestCollectTaskRoleNoneOnFargateWithoutRole(t *testing.T) {
 }
 
 func TestCollectContainerInstanceNilForFargate(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	withTask(f, runningTask())
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 	ci, err := s.ContainerInstance.Get(context.Background())
 	if err != nil || ci != nil {
 		t.Errorf("ContainerInstance = (%v, %v), want (nil, nil) for Fargate", ci, err)
@@ -302,10 +308,10 @@ func TestCollectContainerInstanceNilForFargate(t *testing.T) {
 }
 
 func TestCollectNetworkNonAwsvpc(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	withTask(f, runningTask()) // no ENI attachment
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 	network, err := s.Network.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Network.Get() error = %v", err)
@@ -316,7 +322,7 @@ func TestCollectNetworkNonAwsvpc(t *testing.T) {
 }
 
 func TestCollectNetworkResolvesSubnetRouteAndEndpoints(t *testing.T) {
-	f := newFakes()
+	f := awsapitest.New()
 	task := runningTask()
 	task.Attachments = []ecstypes.Attachment{{
 		Type: aws.String("ElasticNetworkInterface"),
@@ -326,14 +332,14 @@ func TestCollectNetworkResolvesSubnetRouteAndEndpoints(t *testing.T) {
 		},
 	}}
 	withTask(f, task)
-	f.ec2.describeSubnets = func(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+	f.EC2.DescribeSubnetsFn = func(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
 		return &ec2.DescribeSubnetsOutput{Subnets: []ec2types.Subnet{{
 			SubnetId:   aws.String("subnet-1"),
 			VpcId:      aws.String("vpc-1"),
 			Ipv6Native: aws.Bool(false),
 		}}}, nil
 	}
-	f.ec2.describeRouteTables = func(in *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+	f.EC2.DescribeRouteTablesFn = func(in *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
 		return &ec2.DescribeRouteTablesOutput{RouteTables: []ec2types.RouteTable{{
 			Routes: []ec2types.Route{{
 				DestinationCidrBlock: aws.String("0.0.0.0/0"),
@@ -342,14 +348,14 @@ func TestCollectNetworkResolvesSubnetRouteAndEndpoints(t *testing.T) {
 			}},
 		}}}, nil
 	}
-	f.ec2.describeVpcEndpoints = func(*ec2.DescribeVpcEndpointsInput) (*ec2.DescribeVpcEndpointsOutput, error) {
+	f.EC2.DescribeVpcEndpointsFn = func(*ec2.DescribeVpcEndpointsInput) (*ec2.DescribeVpcEndpointsOutput, error) {
 		return &ec2.DescribeVpcEndpointsOutput{VpcEndpoints: []ec2types.VpcEndpoint{{
 			ServiceName: aws.String("com.amazonaws.ap-northeast-1.ssmmessages"),
 			State:       ec2types.StateAvailable,
 		}}}, nil
 	}
 
-	s := Collect(context.Background(), f.deps(), "my-cluster", "abc123")
+	s := Collect(context.Background(), depsOf(f), "my-cluster", "abc123")
 	network, err := s.Network.Get(context.Background())
 	if err != nil {
 		t.Fatalf("Network.Get() error = %v", err)

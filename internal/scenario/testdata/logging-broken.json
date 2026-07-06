@@ -1,0 +1,73 @@
+{
+  "task": {
+    "taskArn": "arn:aws:ecs:ap-northeast-1:123456789012:task/my-cluster/abc123",
+    "clusterArn": "arn:aws:ecs:ap-northeast-1:123456789012:cluster/my-cluster",
+    "taskDefinitionArn": "arn:aws:ecs:ap-northeast-1:123456789012:task-definition/app:3",
+    "lastStatus": "RUNNING",
+    "launchType": "FARGATE",
+    "platformVersion": "1.4.0",
+    "platformFamily": "Linux",
+    "enableExecuteCommand": true,
+    "containers": [
+      {
+        "name": "app",
+        "managedAgents": [
+          { "name": "ExecuteCommandAgent", "lastStatus": "RUNNING" }
+        ]
+      }
+    ],
+    "attachments": [
+      {
+        "type": "ElasticNetworkInterface",
+        "details": [
+          { "name": "networkInterfaceId", "value": "eni-1" },
+          { "name": "subnetId", "value": "subnet-1" }
+        ]
+      }
+    ]
+  },
+  "taskDefinition": {
+    "family": "app",
+    "revision": 3,
+    "taskRoleArn": "arn:aws:iam::123456789012:role/app-task-role",
+    "containerDefinitions": [
+      { "name": "app", "linuxParameters": { "initProcessEnabled": true } }
+    ]
+  },
+  "cluster": {
+    "clusterName": "my-cluster",
+    "status": "ACTIVE",
+    "configuration": {
+      "executeCommandConfiguration": {
+        "logging": "OVERRIDE",
+        "kmsKeyId": "key-1234",
+        "logConfiguration": {
+          "cloudWatchLogGroupName": "/ecs/exec",
+          "cloudWatchEncryptionEnabled": true,
+          "s3BucketName": "exec-logs",
+          "s3EncryptionEnabled": true
+        }
+      }
+    }
+  },
+  "env": {
+    "kmsKeyMissing": true,
+    "logGroupExists": false,
+    "s3BucketExists": false,
+    "subnet": { "subnetId": "subnet-1", "vpcId": "vpc-1", "ipv6Native": false },
+    "publicRoute": true,
+    "denyActions": ["ssm:StartSession"]
+  },
+  "expect": {
+    "CLUSTER-001": "ok",
+    "CLUSTER-002": "ok",
+    "CLUSTER-003": "error",
+    "CLUSTER-004": "error",
+    "CLUSTER-005": "error",
+    "IAM-003": "ok",
+    "IAM-004": "ok",
+    "IAM-005": "ok",
+    "IAM-006": "ok",
+    "NET-003": "skip"
+  }
+}

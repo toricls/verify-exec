@@ -16,15 +16,16 @@ import (
 )
 
 type stubCheck struct {
-	id       string
-	deps     []collect.Field
-	findings []checks.Finding
+	id            string
+	deps          []collect.Field
+	notApplicable bool
+	findings      []checks.Finding
 }
 
 func (c *stubCheck) ID() string                        { return c.id }
 func (c *stubCheck) Name() string                      { return c.id }
 func (c *stubCheck) DependsOn() []collect.Field        { return c.deps }
-func (c *stubCheck) Applicable(*collect.Snapshot) bool { return true }
+func (c *stubCheck) Applicable(*collect.Snapshot) bool { return !c.notApplicable }
 func (c *stubCheck) Run(context.Context, *collect.Snapshot) []checks.Finding {
 	return c.findings
 }
@@ -46,6 +47,31 @@ func TestRunEmitsSkipWhenDependencyCanceledByFailFast(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
+	if len(findings) != 1 || findings[0].Level != checks.LevelSkip {
+		t.Fatalf("findings = %+v, want single skip", findings)
+	}
+}
+
+func TestRunEmitsSkipForNotApplicableCheck(t *testing.T) {
+	s := collect.NewSnapshot()
+	s.Task.Complete(&ecstypes.Task{TaskArn: aws.String("arn:x:task/abc")}, nil)
+
+	check := &stubCheck{
+		id:            "TASK-004",
+		deps:          []collect.Field{collect.FieldTask},
+		notApplicable: true,
+		findings:      []checks.Finding{{CheckID: "TASK-004", Level: checks.LevelError}},
+	}
+	findings, err := Run(context.Background(), Options{
+		Checks:   []checks.Check{check},
+		Snapshot: s,
+		Renderer: report.NewPlainRenderer(&bytes.Buffer{}),
+		TaskID:   "abc",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	// Run() must never have been consulted: a single skip is emitted.
 	if len(findings) != 1 || findings[0].Level != checks.LevelSkip {
 		t.Fatalf("findings = %+v, want single skip", findings)
 	}
