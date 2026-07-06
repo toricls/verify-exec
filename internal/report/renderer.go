@@ -1,6 +1,7 @@
-// Package report renders check results. We ship PlainRenderer
-// (append in completion order) and JSONRenderer (buffer everything,
-// sort by checkId, emit once). The bubbletea TUI arrives later.
+// Package report renders check results: TUIRenderer (live fixed-row
+// updates on a TTY), PlainRenderer (append in completion order; the
+// non-TTY fallback), and JSONRenderer (buffer everything, sort by
+// checkId, emit once).
 package report
 
 import (

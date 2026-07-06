@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/toricls/verify-exec/internal/checks"
 	"github.com/toricls/verify-exec/internal/collect"
@@ -80,11 +81,19 @@ func run() int {
 }
 
 func execute(ctx context.Context, cluster, taskID string, opts options) (int, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	var renderer report.Renderer
 	switch opts.output {
 	case "table":
-		// plain append mode; TUI will take over here on a TTY.
-		renderer = report.NewPlainRenderer(os.Stdout)
+		if term.IsTerminal(int(os.Stdout.Fd())) {
+			// Live fixed-row TUI; a user interrupt cancels the run.
+			renderer = report.NewTUIRenderer(os.Stdout, cancel)
+		} else {
+			// Non-TTY (pipes, CI): append in completion order instead.
+			renderer = report.NewPlainRenderer(os.Stdout)
+		}
 	case "json":
 		renderer = report.NewJSONRenderer(os.Stdout)
 	default:
