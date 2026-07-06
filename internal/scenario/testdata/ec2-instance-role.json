@@ -1,0 +1,57 @@
+{
+  "task": {
+    "taskArn": "arn:aws:ecs:ap-northeast-1:123456789012:task/my-cluster/def456",
+    "clusterArn": "arn:aws:ecs:ap-northeast-1:123456789012:cluster/my-cluster",
+    "taskDefinitionArn": "arn:aws:ecs:ap-northeast-1:123456789012:task-definition/legacy:12",
+    "containerInstanceArn": "arn:aws:ecs:ap-northeast-1:123456789012:container-instance/my-cluster/ci-1",
+    "lastStatus": "RUNNING",
+    "launchType": "EC2",
+    "enableExecuteCommand": true,
+    "containers": [
+      {
+        "name": "web",
+        "managedAgents": [
+          { "name": "ExecuteCommandAgent", "lastStatus": "RUNNING" }
+        ]
+      }
+    ]
+  },
+  "taskDefinition": {
+    "family": "legacy",
+    "revision": 12,
+    "containerDefinitions": [
+      { "name": "web", "linuxParameters": { "initProcessEnabled": true } }
+    ]
+  },
+  "cluster": {
+    "clusterName": "my-cluster",
+    "status": "ACTIVE",
+    "configuration": {
+      "executeCommandConfiguration": { "logging": "DEFAULT" }
+    }
+  },
+  "containerInstance": {
+    "containerInstanceArn": "arn:aws:ecs:ap-northeast-1:123456789012:container-instance/my-cluster/ci-1",
+    "ec2InstanceId": "i-0123456789abcdef0",
+    "versionInfo": { "agentVersion": "1.49.0" }
+  },
+  "env": {
+    "instanceProfileRoleArn": "arn:aws:iam::123456789012:role/ecs-node-role",
+    "denyActions": ["ssm:StartSession"]
+  },
+  "expect": {
+    "CLUSTER-001": "ok",
+    "TASK-001": "ok",
+    "TASK-002": "ok",
+    "TASK-003": "ok",
+    "TASK-004": "skip",
+    "TASK-005": "error",
+    "TDEF-005": "ok",
+    "IAM-001": "ok",
+    "IAM-002": "ok",
+    "IAM-007": "ok",
+    "NET-001": "skip",
+    "NET-002": "skip",
+    "NET-003": "skip"
+  }
+}
