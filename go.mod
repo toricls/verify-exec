@@ -14,7 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/charmbracelet/bubbletea v1.3.10
-	github.com/mattn/go-runewidth v0.0.24
+	github.com/mattn/go-runewidth v0.0.31
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.44.0
 )
